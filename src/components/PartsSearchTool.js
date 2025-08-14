@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Download, Filter, X, Upload, FileText } from 'lucide-react';
+import { Search, Download, X, Upload, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const PartsSearchTool = () => {
