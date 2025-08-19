@@ -2,7 +2,7 @@
   "name": "parts-database-search",
   "version": "1.0.0",
   "private": true,
-  "homepage": "https://yourusername.github.io/parts-database-search",
+  "homepage": "https://iffinc-ga.github.io/parts-database-search",
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
