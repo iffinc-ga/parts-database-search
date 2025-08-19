@@ -22,7 +22,7 @@ const PartsSearchTool = () => {
     try {
       // For GitHub deployment, you'll need to place your Excel file in the public folder
       // and update this path accordingly
-      const response = await fetch('/parts-database-search/parts_db_8.1.2025.xlsx');
+      const response = await fetch(`${process.env.PUBLIC_URL}/parts_db_8.1.2025.xlsx`);
       const arrayBuffer = await response.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
