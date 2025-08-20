@@ -264,12 +264,17 @@ const PartsSearchTool = () => {
   };
 
   const searchForMatchingParts = (searchTerm) => {
+    console.log('searchForMatchingParts called with:', searchTerm);
+    
     if (!searchTerm.trim()) {
+      console.log('Empty search term, clearing suggestions');
       setMatchingSuggestions([]);
       return;
     }
 
     const terms = searchTerm.toLowerCase().trim().split(/\s+/);
+    console.log('Search terms:', terms);
+    console.log('Parts data length:', partsData.length);
     
     const suggestions = partsData.filter(part => {
       // For matching, ALL terms must be found somewhere in the part data
@@ -281,6 +286,8 @@ const PartsSearchTool = () => {
       });
     }).slice(0, 10); // Limit to 10 suggestions
 
+    console.log('Suggestions found:', suggestions.length);
+    console.log('First few suggestions:', suggestions.slice(0, 3));
     setMatchingSuggestions(suggestions);
   };
 
