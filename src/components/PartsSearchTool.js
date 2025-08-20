@@ -151,8 +151,6 @@ const PartsSearchTool = () => {
 
       // Find column indices
       const headers = jsonData[0];
-      console.log('Headers found:', headers);
-      
       const primaryPartCol = headers.findIndex(h => 
         h && h.toString().toUpperCase().includes('PRIMARY') && h.toString().toUpperCase().includes('PART')
       );
@@ -160,18 +158,13 @@ const PartsSearchTool = () => {
         h && h.toString().toUpperCase().includes('TARIFF') && h.toString().toUpperCase().includes('NUM')
       );
 
-      console.log('Primary Part Column Index:', primaryPartCol);
-      console.log('Tariff Column Index:', tariffCol);
-
       if (primaryPartCol === -1) {
-        console.log('Available headers:', headers);
         alert('Could not find a "PRIMARY PART NUMBER" column in the uploaded file.');
         setProcessingUpload(false);
         return;
       }
 
       if (tariffCol === -1) {
-        console.log('Available headers:', headers);
         alert('Could not find a "TARIFF NUM" column in the uploaded file.');
         setProcessingUpload(false);
         return;
@@ -195,30 +188,23 @@ const PartsSearchTool = () => {
       let notFoundCount = 0;
       const notFoundParts = [];
 
-      console.log('Starting to process', jsonData.length - 1, 'rows');
-
       for (let i = 1; i < jsonData.length; i++) {
         const row = jsonData[i];
         const primaryPart = row[primaryPartCol]?.toString().trim();
         
         if (primaryPart) {
-          console.log('Processing part:', primaryPart);
           const upperPart = primaryPart.toUpperCase();
           let tariffCode = eurolinkMap.get(upperPart) || supplierMap.get(upperPart);
           
           if (tariffCode) {
             row[tariffCol] = tariffCode;
             matchedCount++;
-            console.log('Matched:', primaryPart, '→', tariffCode);
           } else {
             notFoundParts.push(primaryPart);
             notFoundCount++;
-            console.log('Not found:', primaryPart);
           }
         }
       }
-
-      console.log('Final results - Matched:', matchedCount, 'Not found:', notFoundCount);
 
       // Create updated workbook
       const newWorksheet = XLSX.utils.aoa_to_sheet(jsonData);
@@ -269,13 +255,34 @@ const PartsSearchTool = () => {
     }
 
     const terms = searchTerm.toLowerCase().trim().split(/\s+/);
+    console.log('Search terms:', terms);
+    
     const suggestions = partsData.filter(part => {
-      return terms.some(term => 
+      // For matching, ALL terms must be found somewhere in the part data
+      const matchesAll = terms.every(term => 
+        part.eurolinkItem.toLowerCase().includes(term) ||
+        part.vendorItem.toLowerCase().includes(term) ||
         part.description1.toLowerCase().includes(term) || 
         part.description2.toLowerCase().includes(term)
       );
+      
+      // Debug specific parts
+      if (part.description1.includes('14399-4')) {
+        console.log('Part with 14399-4:', part.description1);
+        console.log('Matches all terms?', matchesAll);
+        terms.forEach(term => {
+          const matches = part.eurolinkItem.toLowerCase().includes(term) ||
+                         part.vendorItem.toLowerCase().includes(term) ||
+                         part.description1.toLowerCase().includes(term) || 
+                         part.description2.toLowerCase().includes(term);
+          console.log(`  Term "${term}" matches:`, matches);
+        });
+      }
+      
+      return matchesAll;
     }).slice(0, 10); // Limit to 10 suggestions
 
+    console.log('Total suggestions found:', suggestions.length);
     setMatchingSuggestions(suggestions);
   };
 
