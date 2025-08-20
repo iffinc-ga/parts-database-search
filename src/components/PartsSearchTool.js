@@ -284,7 +284,7 @@ const PartsSearchTool = () => {
   };
 
   const addMatchToTariffSheet = async (unmatchedPartNumber, matchedPart) => {
-    // Find the row in the original uploaded data that contains this unmatched part
+    // Find ALL rows in the original uploaded data that contain this unmatched part
     const uploadData = uploadResults.data;
     const headers = uploadData[0];
     const primaryPartCol = headers.findIndex(h => 
@@ -294,13 +294,14 @@ const PartsSearchTool = () => {
       h && h.toString().toUpperCase().includes('TARIFF') && h.toString().toUpperCase().includes('NUM')
     );
 
-    // Find and update the row with this part number
+    let rowsUpdated = 0;
+    // Find and update ALL rows with this part number (don't break after first match)
     for (let i = 1; i < uploadData.length; i++) {
       const row = uploadData[i];
       if (row[primaryPartCol]?.toString().trim() === unmatchedPartNumber) {
         // Add the tariff code to this row
         row[tariffCol] = matchedPart.tariff;
-        break;
+        rowsUpdated++;
       }
     }
 
@@ -311,7 +312,8 @@ const PartsSearchTool = () => {
       matchedFrom: matchedPart.eurolinkItem,
       description1: matchedPart.description1,
       description2: matchedPart.description2,
-      vendorName: matchedPart.vendorName
+      vendorName: matchedPart.vendorName,
+      rowsUpdated: rowsUpdated // Track how many rows were updated
     };
 
     const updatedNewlyMatched = [...newlyMatchedParts, newlyMatched];
@@ -325,8 +327,8 @@ const PartsSearchTool = () => {
     const updatedUploadResults = {
       ...uploadResults,
       data: uploadData, // Updated data with new tariff
-      matched: uploadResults.matched + 1,
-      notFound: uploadResults.notFound - 1,
+      matched: uploadResults.matched + rowsUpdated, // Add the actual number of rows updated
+      notFound: uploadResults.notFound - 1, // Only subtract 1 from unique unmatched parts
       allUnmatchedParts: updatedUnmatched
     };
 
@@ -338,14 +340,15 @@ const PartsSearchTool = () => {
     // Add "Newly Matched" tab if there are newly matched parts
     if (updatedNewlyMatched.length > 0) {
       const newlyMatchedData = [
-        ['Part Number', 'Tariff Code', 'Matched From', 'Description 1', 'Description 2', 'Vendor Name'],
+        ['Part Number', 'Tariff Code', 'Matched From', 'Description 1', 'Description 2', 'Vendor Name', 'Rows Updated'],
         ...updatedNewlyMatched.map(part => [
           part.partNumber,
           part.tariffCode,
           part.matchedFrom,
           part.description1,
           part.description2,
-          part.vendorName
+          part.vendorName,
+          part.rowsUpdated
         ])
       ];
       const newlyMatchedSheet = XLSX.utils.aoa_to_sheet(newlyMatchedData);
@@ -355,7 +358,11 @@ const PartsSearchTool = () => {
     updatedUploadResults.workbook = newWorkbook;
     setUploadResults(updatedUploadResults);
 
-    alert(`Successfully added tariff code ${matchedPart.tariff} to ${unmatchedPartNumber}`);
+    const message = rowsUpdated === 1 
+      ? `Successfully added tariff code ${matchedPart.tariff} to ${unmatchedPartNumber}`
+      : `Successfully added tariff code ${matchedPart.tariff} to ${unmatchedPartNumber} (${rowsUpdated} rows updated)`;
+    
+    alert(message);
   };
 
   const downloadUpdatedDatabase = () => {
