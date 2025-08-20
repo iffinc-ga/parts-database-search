@@ -12,6 +12,11 @@ const PartsSearchTool = () => {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [uploadResults, setUploadResults] = useState(null);
   const [processingUpload, setProcessingUpload] = useState(false);
+  const [showMatchingModal, setShowMatchingModal] = useState(false);
+  const [unmatchedParts, setUnmatchedParts] = useState([]);
+  const [selectedUnmatched, setSelectedUnmatched] = useState(null);
+  const [searchForMatching, setSearchForMatching] = useState('');
+  const [matchingSuggestions, setMatchingSuggestions] = useState([]);
 
   // Load the Excel file on component mount
   useEffect(() => {
@@ -212,7 +217,8 @@ const PartsSearchTool = () => {
         matched: matchedCount,
         notFound: notFoundCount,
         notFoundParts: notFoundParts.slice(0, 20), // Show first 20 not found
-        totalNotFound: notFoundParts.length
+        totalNotFound: notFoundParts.length,
+        allUnmatchedParts: notFoundParts // Store all unmatched for matching feature
       });
 
     } catch (error) {
@@ -232,6 +238,114 @@ const PartsSearchTool = () => {
   const clearUpload = () => {
     setUploadedFile(null);
     setUploadResults(null);
+  };
+
+  // Matching functionality for unmatched parts
+  const openMatchingModal = () => {
+    if (uploadResults?.allUnmatchedParts) {
+      setUnmatchedParts(uploadResults.allUnmatchedParts);
+      setShowMatchingModal(true);
+    }
+  };
+
+  const searchForMatchingParts = (searchTerm) => {
+    if (!searchTerm.trim()) {
+      setMatchingSuggestions([]);
+      return;
+    }
+
+    const terms = searchTerm.toLowerCase().trim().split(/\s+/);
+    const suggestions = partsData.filter(part => {
+      return terms.some(term => 
+        part.description1.toLowerCase().includes(term) || 
+        part.description2.toLowerCase().includes(term)
+      );
+    }).slice(0, 10); // Limit to 10 suggestions
+
+    setMatchingSuggestions(suggestions);
+  };
+
+  const addMatchToDatabase = async (unmatchedPartNumber, matchedPart) => {
+    // Create new part entry based on matched part but with the unmatched part number
+    const newPart = {
+      id: partsData.length,
+      eurolinkItem: unmatchedPartNumber, // Use the unmatched part as the new Eurolink part
+      description1: matchedPart.description1,
+      description2: matchedPart.description2,
+      vendorCode: matchedPart.vendorCode,
+      vendorItem: unmatchedPartNumber, // Also use as vendor item
+      tariff: matchedPart.tariff,
+      category: matchedPart.category,
+      subCategory: matchedPart.subCategory,
+      vendorName: matchedPart.vendorName,
+      vendorAddress: matchedPart.vendorAddress,
+      city: matchedPart.city,
+      state: matchedPart.state,
+      zip: matchedPart.zip
+    };
+
+    // Add to partsData
+    const updatedPartsData = [...partsData, newPart];
+    setPartsData(updatedPartsData);
+
+    // Remove from unmatched list
+    const updatedUnmatched = unmatchedParts.filter(part => part !== unmatchedPartNumber);
+    setUnmatchedParts(updatedUnmatched);
+
+    // Update upload results
+    const updatedUploadResults = {
+      ...uploadResults,
+      matched: uploadResults.matched + 1,
+      notFound: uploadResults.notFound - 1,
+      allUnmatchedParts: updatedUnmatched
+    };
+    setUploadResults(updatedUploadResults);
+
+    alert(`Successfully added ${unmatchedPartNumber} to the database with tariff code ${matchedPart.tariff}`);
+  };
+
+  const downloadUpdatedDatabase = () => {
+    // Create Excel file with updated parts data
+    const dataToExport = partsData.map(part => [
+      part.eurolinkItem,
+      part.description1,
+      part.description2,
+      part.vendorCode,
+      part.vendorItem,
+      part.tariff,
+      part.category,
+      part.subCategory,
+      part.vendorName,
+      part.vendorAddress,
+      '', // Empty column
+      part.city,
+      part.state,
+      part.zip
+    ]);
+
+    // Add headers
+    const headers = [
+      'EUROLINK ITEM#',
+      'DESCRIPTION 1',
+      'DESCRIPTION 2',
+      'VENDOR CODE',
+      'VENDOR ITEM #',
+      'TARIFF',
+      'CATEGORY',
+      'SUB CATEGORY',
+      'VENDOR NAME',
+      'VENDOR ADDRESS',
+      'VENDOR ADDRESS',
+      'CITY',
+      'STATE',
+      'ZIP'
+    ];
+
+    const finalData = [headers, ...dataToExport];
+    const ws = XLSX.utils.aoa_to_sheet(finalData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Updated Parts Database');
+    XLSX.writeFile(wb, 'updated_parts_database.xlsx');
   };
 
   if (loading) {
@@ -331,6 +445,24 @@ const PartsSearchTool = () => {
               >
                 <Download className="h-4 w-4" />
                 Download Updated File
+              </button>
+              
+              {uploadResults.totalNotFound > 0 && (
+                <button
+                  onClick={openMatchingModal}
+                  className="mt-3 ml-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+                >
+                  <Search className="h-4 w-4" />
+                  Match Unmatched Parts ({uploadResults.totalNotFound})
+                </button>
+              )}
+              
+              <button
+                onClick={downloadUpdatedDatabase}
+                className="mt-3 ml-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                Download Updated Database
               </button>
             </div>
           )}
@@ -637,6 +769,123 @@ const PartsSearchTool = () => {
                         {selectedPart.subCategory}
                       </p>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Matching Modal for Unmatched Parts */}
+        {showMatchingModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <h2 className="text-2xl font-bold text-gray-900">Match Unmatched Parts</h2>
+                  <button
+                    onClick={() => setShowMatchingModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left side - Unmatched Parts */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Unmatched Parts ({unmatchedParts.length})</h3>
+                    <div className="border rounded-lg max-h-96 overflow-y-auto">
+                      {unmatchedParts.map((part, index) => (
+                        <div
+                          key={index}
+                          className={`p-3 border-b cursor-pointer hover:bg-gray-50 ${
+                            selectedUnmatched === part ? 'bg-blue-50 border-blue-200' : ''
+                          }`}
+                          onClick={() => setSelectedUnmatched(part)}
+                        >
+                          <span className="font-mono text-sm">{part}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right side - Search and Match */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">
+                      Find Match for: 
+                      {selectedUnmatched && (
+                        <span className="font-mono text-blue-600 ml-2">{selectedUnmatched}</span>
+                      )}
+                    </h3>
+                    
+                    {selectedUnmatched && (
+                      <>
+                        <div className="mb-4">
+                          <input
+                            type="text"
+                            value={searchForMatching}
+                            onChange={(e) => {
+                              setSearchForMatching(e.target.value);
+                              searchForMatchingParts(e.target.value);
+                            }}
+                            placeholder="Search by description keywords..."
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+
+                        {matchingSuggestions.length > 0 && (
+                          <div className="border rounded-lg max-h-96 overflow-y-auto">
+                            <div className="bg-gray-50 px-3 py-2 border-b font-medium text-sm">
+                              Suggested Matches ({matchingSuggestions.length})
+                            </div>
+                            {matchingSuggestions.map((suggestion, index) => (
+                              <div
+                                key={suggestion.id}
+                                className="p-3 border-b hover:bg-gray-50"
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="font-medium text-sm text-blue-600">
+                                      {suggestion.eurolinkItem}
+                                    </div>
+                                    <div className="text-sm text-gray-900 mt-1">
+                                      {suggestion.description1}
+                                    </div>
+                                    {suggestion.description2 && (
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        {suggestion.description2}
+                                      </div>
+                                    )}
+                                    <div className="text-xs text-gray-600 mt-1">
+                                      Tariff: <span className="font-mono">{suggestion.tariff}</span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => addMatchToDatabase(selectedUnmatched, suggestion)}
+                                    className="ml-3 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                                  >
+                                    Use This Match
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {searchForMatching && matchingSuggestions.length === 0 && (
+                          <div className="text-center py-8 text-gray-500">
+                            No matching parts found. Try different search terms.
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {!selectedUnmatched && (
+                      <div className="text-center py-8 text-gray-500">
+                        Select an unmatched part from the left to find matches
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
