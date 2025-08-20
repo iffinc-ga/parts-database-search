@@ -274,22 +274,31 @@ const PartsSearchTool = () => {
     const suggestions = partsData.filter(part => {
       // For matching, ALL terms must be found somewhere in the part data
       return terms.every(term => {
-        // Create variations of the term for better matching
-        const termVariations = [
-          term,                          // exact term: "14399"
-          term.replace(/[-\s]/g, ''),    // remove hyphens/spaces: "14399"
-          term + '-',                    // add hyphen: "14399-"
-          '-' + term,                    // prepend hyphen: "-14399"
-          term.replace(/(\d+)/, '$1-')   // add hyphen after numbers: "14399-"
-        ];
+        // Check the original term first
+        const exactMatch = 
+          part.eurolinkItem.toLowerCase().includes(term) ||
+          part.vendorItem.toLowerCase().includes(term) ||
+          part.description1.toLowerCase().includes(term) || 
+          part.description2.toLowerCase().includes(term);
         
-        // Check all fields with all variations
-        return termVariations.some(variation => 
-          part.eurolinkItem.toLowerCase().includes(variation) ||
-          part.vendorItem.toLowerCase().includes(variation) ||
-          part.description1.toLowerCase().includes(variation) || 
-          part.description2.toLowerCase().includes(variation)
-        );
+        // If exact match found, we're good
+        if (exactMatch) return true;
+        
+        // Only for numeric terms, try some variations
+        if (/^\d+$/.test(term)) {
+          // Only try hyphen variations for pure numbers
+          const withHyphen = term + '-';
+          const hyphenMatch = 
+            part.eurolinkItem.toLowerCase().includes(withHyphen) ||
+            part.vendorItem.toLowerCase().includes(withHyphen) ||
+            part.description1.toLowerCase().includes(withHyphen) || 
+            part.description2.toLowerCase().includes(withHyphen);
+          
+          return hyphenMatch;
+        }
+        
+        // For non-numeric terms, only exact match
+        return false;
       });
     }).slice(0, 10); // Limit to 10 suggestions
 
