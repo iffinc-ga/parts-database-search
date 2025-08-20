@@ -201,11 +201,22 @@ const PartsSearchTool = () => {
             row[tariffCol] = tariffCode;
             matchedCount++;
           } else {
-            notFoundParts.push(primaryPart);
-            notFoundCount++;
+            // Only add to notFoundParts if it's not already there (avoid duplicates)
+            if (!notFoundParts.includes(primaryPart)) {
+              notFoundParts.push(primaryPart);
+            }
           }
         }
       }
+
+      // Count actual unmatched rows for accurate reporting
+      notFoundCount = jsonData.slice(1).filter(row => {
+        const primaryPart = row[primaryPartCol]?.toString().trim();
+        if (!primaryPart) return false;
+        const upperPart = primaryPart.toUpperCase();
+        const tariffCode = eurolinkMap.get(upperPart) || supplierMap.get(upperPart);
+        return !tariffCode;
+      }).length;
 
       // Create updated workbook
       const newWorksheet = XLSX.utils.aoa_to_sheet(jsonData);
@@ -218,7 +229,9 @@ const PartsSearchTool = () => {
         matched: matchedCount,
         notFound: notFoundCount,
         notFoundParts: notFoundParts.slice(0, 20), // Show first 20 not found
-        totalNotFound: notFoundParts.length,
+        totalNotFound: notFoundParts.length, // This is now unique parts count
+        uniqueNotFoundCount: notFoundParts.length, // Track unique count separately
+        totalUnmatchedRows: notFoundCount, // Track total unmatched rows
         allUnmatchedParts: notFoundParts // Store all unmatched for matching feature
       });
 
@@ -485,7 +498,7 @@ const PartsSearchTool = () => {
               <h3 className="font-semibold text-green-900 mb-2">Processing Complete!</h3>
               <div className="text-sm text-green-800 space-y-1">
                 <p>✓ {uploadResults.matched} part numbers matched and populated with tariff codes</p>
-                <p>⚠ {uploadResults.notFound} part numbers not found in database</p>
+                <p>⚠ {uploadResults.totalUnmatchedRows} unmatched rows ({uploadResults.uniqueNotFoundCount} unique parts)</p>
                 {uploadResults.notFoundParts.length > 0 && (
                   <details className="mt-2">
                     <summary className="cursor-pointer font-medium">Show some unmatched parts</summary>
@@ -514,7 +527,7 @@ const PartsSearchTool = () => {
                   className="mt-3 ml-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
                 >
                   <Search className="h-4 w-4" />
-                  Match Unmatched Parts ({uploadResults.totalNotFound})
+                  Match Unmatched Parts ({uploadResults.uniqueNotFoundCount})
                 </button>
               )}
               
