@@ -270,49 +270,17 @@ const PartsSearchTool = () => {
     }
 
     const terms = searchTerm.toLowerCase().trim().split(/\s+/);
-    console.log('Search terms:', terms);
     
     const suggestions = partsData.filter(part => {
       // For matching, ALL terms must be found somewhere in the part data
-      const matches = terms.every(term => {
-        const found = part.eurolinkItem.toLowerCase().includes(term) ||
-                     part.vendorItem.toLowerCase().includes(term) ||
-                     part.description1.toLowerCase().includes(term) || 
-                     part.description2.toLowerCase().includes(term);
-        return found;
+      return terms.every(term => {
+        return part.eurolinkItem.toLowerCase().includes(term) ||
+               part.vendorItem.toLowerCase().includes(term) ||
+               part.description1.toLowerCase().includes(term) || 
+               part.description2.toLowerCase().includes(term);
       });
-      
-      // Debug the specific problematic part
-      if (part.description1.includes('6914') && matches) {
-        console.log('DEBUG: Part with 6914 matched search:', {
-          searchTerms: terms,
-          part: part.description1,
-          eurolinkItem: part.eurolinkItem,
-          vendorItem: part.vendorItem,
-          description1: part.description1,
-          description2: part.description2
-        });
-        
-        // Check each term individually
-        terms.forEach(term => {
-          const termFound = part.eurolinkItem.toLowerCase().includes(term) ||
-                           part.vendorItem.toLowerCase().includes(term) ||
-                           part.description1.toLowerCase().includes(term) || 
-                           part.description2.toLowerCase().includes(term);
-          console.log(`Term "${term}" found in part:`, termFound);
-          if (termFound) {
-            if (part.eurolinkItem.toLowerCase().includes(term)) console.log(`  Found in eurolinkItem: ${part.eurolinkItem}`);
-            if (part.vendorItem.toLowerCase().includes(term)) console.log(`  Found in vendorItem: ${part.vendorItem}`);
-            if (part.description1.toLowerCase().includes(term)) console.log(`  Found in description1: ${part.description1}`);
-            if (part.description2.toLowerCase().includes(term)) console.log(`  Found in description2: ${part.description2}`);
-          }
-        });
-      }
-      
-      return matches;
-    }).slice(0, 10);
+    }).slice(0, 10); // Limit to 10 suggestions
 
-    console.log('Total suggestions found:', suggestions.length);
     setMatchingSuggestions(suggestions);
   };
 
