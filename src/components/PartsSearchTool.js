@@ -279,15 +279,35 @@ const PartsSearchTool = () => {
     const suggestions = partsData.filter(part => {
       // For matching, ALL terms must be found somewhere in the part data
       return terms.every(term => {
-        return part.eurolinkItem.toLowerCase().includes(term) ||
-               part.vendorItem.toLowerCase().includes(term) ||
-               part.description1.toLowerCase().includes(term) || 
-               part.description2.toLowerCase().includes(term);
+        // Check all fields for exact term
+        const fields = [
+          part.eurolinkItem.toLowerCase(),
+          part.vendorItem.toLowerCase(),
+          part.description1.toLowerCase(),
+          part.description2.toLowerCase()
+        ];
+        
+        // First try exact match
+        if (fields.some(field => field.includes(term))) {
+          return true;
+        }
+        
+        // For pure numbers only, also try with hyphen
+        // But ONLY if it's a pure number and we're looking for standards
+        if (/^\d{4,}$/.test(term)) { // Only 4+ digit numbers (like 14399, not 70 or M20)
+          const withHyphen = term + '-';
+          if (fields.some(field => field.includes(withHyphen))) {
+            console.log(`Found ${term} as ${withHyphen} in:`, part.description1);
+            return true;
+          }
+        }
+        
+        console.log(`Term "${term}" not found in:`, part.description1);
+        return false;
       });
     }).slice(0, 10); // Limit to 10 suggestions
 
     console.log('Suggestions found:', suggestions.length);
-    console.log('First few suggestions:', suggestions.slice(0, 3));
     setMatchingSuggestions(suggestions);
   };
 
@@ -907,6 +927,7 @@ const PartsSearchTool = () => {
                             type="text"
                             value={searchForMatching}
                             onChange={(e) => {
+                              console.log('Input onChange triggered:', e.target.value);
                               setSearchForMatching(e.target.value);
                               searchForMatchingParts(e.target.value);
                             }}
