@@ -17,6 +17,7 @@ const PartsSearchTool = () => {
   const [selectedUnmatched, setSelectedUnmatched] = useState(null);
   const [searchForMatching, setSearchForMatching] = useState('');
   const [matchingSuggestions, setMatchingSuggestions] = useState([]);
+  const [newlyMatchedParts, setNewlyMatchedParts] = useState([]); // Track newly matched parts
 
   // Load the Excel file on component mount
   useEffect(() => {
@@ -238,6 +239,7 @@ const PartsSearchTool = () => {
   const clearUpload = () => {
     setUploadedFile(null);
     setUploadResults(null);
+    setNewlyMatchedParts([]); // Clear newly matched parts when clearing upload
   };
 
   // Matching functionality for unmatched parts
@@ -286,28 +288,39 @@ const PartsSearchTool = () => {
     setMatchingSuggestions(suggestions);
   };
 
-  const addMatchToDatabase = async (unmatchedPartNumber, matchedPart) => {
-    // Create new part entry based on matched part but with the unmatched part number
-    const newPart = {
-      id: partsData.length,
-      eurolinkItem: unmatchedPartNumber, // Use the unmatched part as the new Eurolink part
+  const addMatchToTariffSheet = async (unmatchedPartNumber, matchedPart) => {
+    // Find the row in the original uploaded data that contains this unmatched part
+    const uploadData = uploadResults.data;
+    const headers = uploadData[0];
+    const primaryPartCol = headers.findIndex(h => 
+      h && h.toString().toUpperCase().includes('PRIMARY') && h.toString().toUpperCase().includes('PART')
+    );
+    const tariffCol = headers.findIndex(h => 
+      h && h.toString().toUpperCase().includes('TARIFF') && h.toString().toUpperCase().includes('NUM')
+    );
+
+    // Find and update the row with this part number
+    for (let i = 1; i < uploadData.length; i++) {
+      const row = uploadData[i];
+      if (row[primaryPartCol]?.toString().trim() === unmatchedPartNumber) {
+        // Add the tariff code to this row
+        row[tariffCol] = matchedPart.tariff;
+        break;
+      }
+    }
+
+    // Track this newly matched part for the separate tab
+    const newlyMatched = {
+      partNumber: unmatchedPartNumber,
+      tariffCode: matchedPart.tariff,
+      matchedFrom: matchedPart.eurolinkItem,
       description1: matchedPart.description1,
       description2: matchedPart.description2,
-      vendorCode: matchedPart.vendorCode,
-      vendorItem: unmatchedPartNumber, // Also use as vendor item
-      tariff: matchedPart.tariff,
-      category: matchedPart.category,
-      subCategory: matchedPart.subCategory,
-      vendorName: matchedPart.vendorName,
-      vendorAddress: matchedPart.vendorAddress,
-      city: matchedPart.city,
-      state: matchedPart.state,
-      zip: matchedPart.zip
+      vendorName: matchedPart.vendorName
     };
 
-    // Add to partsData
-    const updatedPartsData = [...partsData, newPart];
-    setPartsData(updatedPartsData);
+    const updatedNewlyMatched = [...newlyMatchedParts, newlyMatched];
+    setNewlyMatchedParts(updatedNewlyMatched);
 
     // Remove from unmatched list
     const updatedUnmatched = unmatchedParts.filter(part => part !== unmatchedPartNumber);
@@ -316,13 +329,38 @@ const PartsSearchTool = () => {
     // Update upload results
     const updatedUploadResults = {
       ...uploadResults,
+      data: uploadData, // Updated data with new tariff
       matched: uploadResults.matched + 1,
       notFound: uploadResults.notFound - 1,
       allUnmatchedParts: updatedUnmatched
     };
+
+    // Create updated workbook with both tabs
+    const newWorksheet = XLSX.utils.aoa_to_sheet(uploadData);
+    const newWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'Updated Data');
+
+    // Add "Newly Matched" tab if there are newly matched parts
+    if (updatedNewlyMatched.length > 0) {
+      const newlyMatchedData = [
+        ['Part Number', 'Tariff Code', 'Matched From', 'Description 1', 'Description 2', 'Vendor Name'],
+        ...updatedNewlyMatched.map(part => [
+          part.partNumber,
+          part.tariffCode,
+          part.matchedFrom,
+          part.description1,
+          part.description2,
+          part.vendorName
+        ])
+      ];
+      const newlyMatchedSheet = XLSX.utils.aoa_to_sheet(newlyMatchedData);
+      XLSX.utils.book_append_sheet(newWorkbook, newlyMatchedSheet, 'Newly Matched');
+    }
+
+    updatedUploadResults.workbook = newWorkbook;
     setUploadResults(updatedUploadResults);
 
-    alert(`Successfully added ${unmatchedPartNumber} to the database with tariff code ${matchedPart.tariff}`);
+    alert(`Successfully added tariff code ${matchedPart.tariff} to ${unmatchedPartNumber}`);
   };
 
   const downloadUpdatedDatabase = () => {
@@ -465,7 +503,7 @@ const PartsSearchTool = () => {
                 className="mt-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors"
               >
                 <Download className="h-4 w-4" />
-                Download Updated File
+                Download Updated File {newlyMatchedParts.length > 0 && `(${newlyMatchedParts.length} newly matched)`}
               </button>
               
               {uploadResults.totalNotFound > 0 && (
@@ -478,13 +516,25 @@ const PartsSearchTool = () => {
                 </button>
               )}
               
-              <button
-                onClick={downloadUpdatedDatabase}
-                className="mt-3 ml-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 transition-colors"
-              >
-                <Download className="h-4 w-4" />
-                Download Updated Database
-              </button>
+              {newlyMatchedParts.length > 0 && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="font-medium text-blue-900 mb-2">Newly Matched Parts Preview:</h4>
+                  <div className="text-sm text-blue-800 space-y-1">
+                    {newlyMatchedParts.slice(0, 3).map((part, idx) => (
+                      <div key={idx} className="flex justify-between">
+                        <span className="font-mono">{part.partNumber}</span>
+                        <span className="font-mono text-green-700">{part.tariffCode}</span>
+                      </div>
+                    ))}
+                    {newlyMatchedParts.length > 3 && (
+                      <div className="text-blue-600">... and {newlyMatchedParts.length - 3} more</div>
+                    )}
+                  </div>
+                  <div className="text-xs text-blue-600 mt-2">
+                    ✓ These will be included in your download with a separate "Newly Matched" tab
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -883,10 +933,10 @@ const PartsSearchTool = () => {
                                     </div>
                                   </div>
                                   <button
-                                    onClick={() => addMatchToDatabase(selectedUnmatched, suggestion)}
+                                    onClick={() => addMatchToTariffSheet(selectedUnmatched, suggestion)}
                                     className="ml-3 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
                                   >
-                                    Use This Match
+                                    Add to Tariff Sheet
                                   </button>
                                 </div>
                               </div>
