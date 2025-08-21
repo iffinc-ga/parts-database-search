@@ -969,9 +969,7 @@ const PartsSearchTool = () => {
                               setSearchForMatching(e.target.value);
                               searchForMatchingParts(e.target.value);
                             }}
-                            placeholder={matchingSearchType === 'description' 
-                              ? "Search by description keywords (e.g. M20, bolt, 14399)..." 
-                              : "Search by part numbers or description keywords..."}
+                            placeholder="Search keywords (e.g. M20, bolt, 14399)..."
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         </div>
