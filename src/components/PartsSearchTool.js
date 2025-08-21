@@ -18,6 +18,7 @@ const PartsSearchTool = () => {
   const [searchForMatching, setSearchForMatching] = useState('');
   const [matchingSuggestions, setMatchingSuggestions] = useState([]);
   const [newlyMatchedParts, setNewlyMatchedParts] = useState([]); // Track newly matched parts
+  const [matchingSearchType, setMatchingSearchType] = useState('description'); // 'all' or 'description'
 
   // Load the Excel file on component mount
   useEffect(() => {
@@ -264,50 +265,72 @@ const PartsSearchTool = () => {
   };
 
   const searchForMatchingParts = (searchTerm) => {
+    if (!searchTerm.trim()) {
+      setMatchingSuggestions([]);
+      return;
+    }
+
+    const terms = searchTerm.toLowerCase().trim().split(/\s+/);
+    
+    const suggestions = partsData.filter(part => {
+      return terms.every(term => {
+        // Escape special regex characters except hyphens and numbers
+        const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\  const searchForMatchingParts = (searchTerm) => {
     console.log('searchForMatchingParts called with:', searchTerm);
     
     if (!searchTerm.trim()) {
-      console.log('Empty search term, clearing suggestions');
       setMatchingSuggestions([]);
       return;
     }
 
     const terms = searchTerm.toLowerCase().trim().split(/\s+/);
     console.log('Search terms:', terms);
-    console.log('Parts data length:', partsData.length);
     
     const suggestions = partsData.filter(part => {
       // For matching, ALL terms must be found somewhere in the part data
-      return terms.every(term => {
-        // Check all fields for exact term
-        const fields = [
-          part.eurolinkItem.toLowerCase(),
-          part.vendorItem.toLowerCase(),
-          part.description1.toLowerCase(),
-          part.description2.toLowerCase()
-        ];
+      const matches = terms.every(term => {
+        const foundIn = [];
+        if (part.eurolinkItem.toLowerCase().includes(term)) foundIn.push('eurolinkItem');
+        if (part.vendorItem.toLowerCase().includes(term)) foundIn.push('vendorItem');
+        if (part.description1.toLowerCase().includes(term)) foundIn.push('description1');
+        if (part.description2.toLowerCase().includes(term)) foundIn.push('description2');
         
-        // First try exact match
-        if (fields.some(field => field.includes(term))) {
-          return true;
+        const found = foundIn.length > 0;
+        if (found) {
+          console.log(`Term "${term}" found in ${foundIn.join(', ')} for part: ${part.description1}`);
         }
-        
-        // For pure numbers only, also try with hyphen
-        // But ONLY if it's a pure number and we're looking for standards
-        if (/^\d{4,}$/.test(term)) { // Only 4+ digit numbers (like 14399, not 70 or M20)
-          const withHyphen = term + '-';
-          if (fields.some(field => field.includes(withHyphen))) {
-            console.log(`Found ${term} as ${withHyphen} in:`, part.description1);
-            return true;
-          }
-        }
-        
-        console.log(`Term "${term}" not found in:`, part.description1);
-        return false;
+        return found;
       });
-    }).slice(0, 10); // Limit to 10 suggestions
+      
+      return matches;
+    }).slice(0, 10);
 
-    console.log('Suggestions found:', suggestions.length);
+    console.log('Total suggestions found:', suggestions.length);
+    setMatchingSuggestions(suggestions);
+  };');
+        
+        // Create regex for smart number matching (finds "14399" in "14399-4")
+        // \b = word boundary, (-\d+)? = optional hyphen followed by digits
+        const regex = new RegExp(`\\b${escapedTerm}(-\\d+)?\\b`, "i");
+        
+        // Define which fields to search based on search type
+        const fieldsToSearch = matchingSearchType === 'description' 
+          ? [part.description1, part.description2]
+          : [part.eurolinkItem, part.vendorItem, part.description1, part.description2];
+        
+        // Check if any field matches the regex
+        return fieldsToSearch.some(field => {
+          if (!field) return false;
+          // For numbers, use regex; for non-numbers, use simple includes
+          if (/^\d+$/.test(term)) {
+            return regex.test(field);
+          } else {
+            return field.toLowerCase().includes(term);
+          }
+        });
+      });
+    }).slice(0, 10);
+
     setMatchingSuggestions(suggestions);
   };
 
@@ -922,16 +945,33 @@ const PartsSearchTool = () => {
                     
                     {selectedUnmatched && (
                       <>
-                        <div className="mb-4">
+                        <div className="mb-4 space-y-3">
+                          <div className="flex gap-2">
+                            <select
+                              value={matchingSearchType}
+                              onChange={(e) => {
+                                setMatchingSearchType(e.target.value);
+                                // Re-run search with new type if there's a search term
+                                if (searchForMatching) {
+                                  searchForMatchingParts(searchForMatching);
+                                }
+                              }}
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            >
+                              <option value="description">Description Only</option>
+                              <option value="all">All Fields</option>
+                            </select>
+                          </div>
                           <input
                             type="text"
                             value={searchForMatching}
                             onChange={(e) => {
-                              console.log('Input onChange triggered:', e.target.value);
                               setSearchForMatching(e.target.value);
                               searchForMatchingParts(e.target.value);
                             }}
-                            placeholder="Search by description keywords..."
+                            placeholder={matchingSearchType === 'description' 
+                              ? "Search by description keywords (e.g. M20, bolt, 14399)..." 
+                              : "Search by part numbers or description keywords..."}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         </div>
