@@ -17,10 +17,10 @@ const PartsSearchTool = () => {
   const [selectedUnmatched, setSelectedUnmatched] = useState(null);
   const [searchForMatching, setSearchForMatching] = useState('');
   const [matchingSuggestions, setMatchingSuggestions] = useState([]);
-  const [newlyMatchedParts, setNewlyMatchedParts] = useState([]); 
-  const [matchingSearchType, setMatchingSearchType] = useState('description'); 
+  const [newlyMatchedParts, setNewlyMatchedParts] = useState([]);
+  const [matchingSearchType, setMatchingSearchType] = useState('description');
 
-  // Load Excel file
+  // Load the Excel file on component mount
   useEffect(() => {
     loadPartsData();
   }, []);
@@ -60,7 +60,7 @@ const PartsSearchTool = () => {
     }
   };
 
-  // Filtering
+  // Search functionality
   const filteredResults = useMemo(() => {
     if (!searchTerm.trim()) {
       return results;
@@ -95,6 +95,7 @@ const PartsSearchTool = () => {
   }, [searchTerm, searchType, partsData, results]);
 
   const handleSearch = () => {};
+
   const clearSearch = () => {
     setSearchTerm('');
     setResults(partsData.slice(0, 50));
@@ -119,7 +120,6 @@ const PartsSearchTool = () => {
     XLSX.writeFile(wb, 'parts_search_results.xlsx');
   };
 
-  // File upload
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -143,8 +143,12 @@ const PartsSearchTool = () => {
       }
 
       const headers = jsonData[0];
-      const primaryPartCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('PRIMARY') && h.toString().toUpperCase().includes('PART'));
-      const tariffCol = headers.findIndex(h => h && h.toString().toUpperCase().includes('TARIFF') && h.toString().toUpperCase().includes('NUM'));
+      const primaryPartCol = headers.findIndex(h => 
+        h && h.toString().toUpperCase().includes('PRIMARY') && h.toString().toUpperCase().includes('PART')
+      );
+      const tariffCol = headers.findIndex(h => 
+        h && h.toString().toUpperCase().includes('TARIFF') && h.toString().toUpperCase().includes('NUM')
+      );
 
       if (primaryPartCol === -1 || tariffCol === -1) {
         alert('Could not find required columns in uploaded file.');
@@ -231,5 +235,47 @@ const PartsSearchTool = () => {
     }
   };
 
-  // ✅ FIXED FUNCTION
-  const searchForMatchingParts = (searchTerm) =
+  // ✅ Fixed function
+  const searchForMatchingParts = (searchTerm) => {
+    if (!searchTerm.trim()) {
+      setMatchingSuggestions([]);
+      return;
+    }
+
+    const terms = searchTerm.toLowerCase().trim().split(/\s+/);
+
+    const suggestions = partsData.filter(part => {
+      return terms.every(term => {
+        const escapedTerm = term.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b${escapedTerm}(-\\d+)?\\b`, "i");
+
+        const fieldsToSearch = matchingSearchType === 'description'
+          ? [part.description1, part.description2]
+          : [part.eurolinkItem, part.vendorItem, part.description1, part.description2];
+
+        return fieldsToSearch.some(field => {
+          if (!field) return false;
+          if (/^\d+$/.test(term)) {
+            return regex.test(field);
+          } else {
+            return field.toLowerCase().includes(term);
+          }
+        });
+      });
+    }).slice(0, 10);
+
+    setMatchingSuggestions(suggestions);
+  };
+
+  // The rest of your JSX remains unchanged
+  return (
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold">Parts Database Search</h1>
+        {/* Keep your existing JSX here (upload, results table, modals, etc.) */}
+      </div>
+    </div>
+  );
+};
+
+export default PartsSearchTool;
