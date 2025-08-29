@@ -376,34 +376,119 @@ const PartsSearchTool = () => {
     };
 
     // Create updated workbook with appropriate tabs
-    const newWorksheet = XLSX.utils.aoa_to_sheet(uploadData);
     const newWorkbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, isOneView ? 'OneView Updated' : 'Updated Data');
+
+    if (isOneView) {
+      // For OneView format, reorder columns to put TariffNumber right after BuyerPartNumber
+      const reorderedData = uploadData.map((row, index) => {
+        if (index === 0) {
+          // Header row - reorder columns
+          const reorderedHeaders = [...headers];
+          // Remove TariffNumber from its current position
+          const tariffHeader = reorderedHeaders.splice(tariffCol, 1)[0];
+          // Insert it right after BuyerPartNumber (position 6)
+          reorderedHeaders.splice(6, 0, tariffHeader);
+          return reorderedHeaders;
+        } else {
+          // Data rows - reorder the same way
+          const reorderedRow = [...row];
+          // Remove tariff value from its current position
+          const tariffValue = reorderedRow.splice(tariffCol, 1)[0];
+          // Insert it right after BuyerPartNumber (position 6)
+          reorderedRow.splice(6, 0, tariffValue);
+          return reorderedRow;
+        }
+      });
+
+      const newWorksheet = XLSX.utils.aoa_to_sheet(reorderedData);
+      
+      // Format as table
+      const range = XLSX.utils.decode_range(newWorksheet['!ref']);
+      newWorksheet['!autofilter'] = { ref: newWorksheet['!ref'] };
+      
+      // Add table formatting
+      const tableRange = `A1:${XLSX.utils.encode_col(range.e.c)}${range.e.r + 1}`;
+      newWorksheet['!tables'] = [{
+        ref: tableRange,
+        name: 'OneViewTable',
+        headerRowCount: 1,
+        totalsRowShown: false
+      }];
+
+      XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'OneView Updated');
+    } else {
+      // Original format - no reordering needed, just add table formatting
+      const newWorksheet = XLSX.utils.aoa_to_sheet(uploadData);
+      
+      // Format as table
+      const range = XLSX.utils.decode_range(newWorksheet['!ref']);
+      newWorksheet['!autofilter'] = { ref: newWorksheet['!ref'] };
+      
+      const tableRange = `A1:${XLSX.utils.encode_col(range.e.c)}${range.e.r + 1}`;
+      newWorksheet['!tables'] = [{
+        ref: tableRange,
+        name: 'UpdatedDataTable',
+        headerRowCount: 1,
+        totalsRowShown: false
+      }];
+
+      XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'Updated Data');
+    }
 
     // Create enhanced "Newly Matched" tab
     if (updatedNewlyMatched.length > 0) {
       if (isOneView) {
         // For OneView format, create tab with complete invoice details plus matching info
+        // Order: InvoiceNumber, SupplierName, BuyerPartNumber, TariffNumber, then other details
         const newlyMatchedData = [
-          ['InvoiceNumber', 'SupplierName', 'BuyerPartNumber', 'SupplierPartNumber', 'Description', 
-           'Quantity', 'UnitPrice', 'ItemTotal', 'TariffNumber', 'Matched From Part', 'Matched From Description'],
+          ['InvoiceNumber', 'SupplierName', 'BuyerPartNumber', 'TariffNumber', 'SupplierPartNumber', 
+           'Description', 'Quantity', 'UnitPrice', 'ItemTotal', 'Matched From Part', 'Matched From Description'],
           ...updatedNewlyMatched.flatMap(part => 
             part.matchedRows.map(row => [
               row.invoiceNumber,
               row.supplierName,
               row.buyerPartNumber,
+              row.tariffNumber, // Now in position 4, right after BuyerPartNumber
               row.supplierPartNumber,
               row.description,
               row.quantity,
               row.unitPrice,
               row.itemTotal,
-              row.tariffNumber,
               row.matchedFromPart,
               row.matchedFromDescription
             ])
           )
         ];
+        
         const newlyMatchedSheet = XLSX.utils.aoa_to_sheet(newlyMatchedData);
+        
+        // Format as table
+        const range = XLSX.utils.decode_range(newlyMatchedSheet['!ref']);
+        newlyMatchedSheet['!autofilter'] = { ref: newlyMatchedSheet['!ref'] };
+        
+        const tableRange = `A1:${XLSX.utils.encode_col(range.e.c)}${range.e.r + 1}`;
+        newlyMatchedSheet['!tables'] = [{
+          ref: tableRange,
+          name: 'NewlyMatchedTable',
+          headerRowCount: 1,
+          totalsRowShown: false
+        }];
+
+        // Set column widths for better appearance
+        newlyMatchedSheet['!cols'] = [
+          {wch: 12}, // InvoiceNumber
+          {wch: 20}, // SupplierName
+          {wch: 18}, // BuyerPartNumber
+          {wch: 15}, // TariffNumber
+          {wch: 18}, // SupplierPartNumber
+          {wch: 40}, // Description
+          {wch: 10}, // Quantity
+          {wch: 12}, // UnitPrice
+          {wch: 12}, // ItemTotal
+          {wch: 18}, // Matched From Part
+          {wch: 30}  // Matched From Description
+        ];
+
         XLSX.utils.book_append_sheet(newWorkbook, newlyMatchedSheet, 'Newly Matched');
       } else {
         // Original format
@@ -419,7 +504,32 @@ const PartsSearchTool = () => {
             part.rowsUpdated
           ])
         ];
+        
         const newlyMatchedSheet = XLSX.utils.aoa_to_sheet(newlyMatchedData);
+        
+        // Format as table
+        const range = XLSX.utils.decode_range(newlyMatchedSheet['!ref']);
+        newlyMatchedSheet['!autofilter'] = { ref: newlyMatchedSheet['!ref'] };
+        
+        const tableRange = `A1:${XLSX.utils.encode_col(range.e.c)}${range.e.r + 1}`;
+        newlyMatchedSheet['!tables'] = [{
+          ref: tableRange,
+          name: 'NewlyMatchedTable',
+          headerRowCount: 1,
+          totalsRowShown: false
+        }];
+
+        // Set column widths
+        newlyMatchedSheet['!cols'] = [
+          {wch: 15}, // Part Number
+          {wch: 15}, // Tariff Code
+          {wch: 18}, // Matched From
+          {wch: 30}, // Description 1
+          {wch: 25}, // Description 2
+          {wch: 20}, // Vendor Name
+          {wch: 12}  // Rows Updated
+        ];
+
         XLSX.utils.book_append_sheet(newWorkbook, newlyMatchedSheet, 'Newly Matched');
       }
     }
