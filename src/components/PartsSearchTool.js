@@ -143,15 +143,39 @@ const PartsSearchTool = () => {
       }
 
       const headers = jsonData[0];
-      const primaryPartCol = headers.findIndex(h => 
-        h && h.toString().toUpperCase().includes('PRIMARY') && h.toString().toUpperCase().includes('PART')
-      );
-      const tariffCol = headers.findIndex(h => 
-        h && h.toString().toUpperCase().includes('TARIFF') && h.toString().toUpperCase().includes('NUM')
-      );
+      
+      // Check for OneView format (has InvoiceNumber and BuyerPartNumber)
+      const isOneViewFormat = headers.some(h => h === 'InvoiceNumber') && 
+                              headers.some(h => h === 'BuyerPartNumber');
+      
+      let primaryPartCol, tariffCol;
+      
+      if (isOneViewFormat) {
+        // OneView format - use exact column names
+        primaryPartCol = headers.findIndex(h => h === 'BuyerPartNumber');
+        tariffCol = headers.findIndex(h => h === 'TariffNumber');
+        console.log('Detected OneView format');
+      } else {
+        // Original format - search for columns containing keywords
+        primaryPartCol = headers.findIndex(h => 
+          h && h.toString().toUpperCase().includes('PRIMARY') && h.toString().toUpperCase().includes('PART')
+        );
+        tariffCol = headers.findIndex(h => 
+          h && h.toString().toUpperCase().includes('TARIFF') && h.toString().toUpperCase().includes('NUM')
+        );
+        console.log('Detected original format');
+      }
 
-      if (primaryPartCol === -1 || tariffCol === -1) {
-        alert('Could not find required columns in uploaded file.');
+      if (primaryPartCol === -1) {
+        const expectedCol = isOneViewFormat ? 'BuyerPartNumber' : 'PRIMARY PART NUMBER';
+        alert(`Could not find "${expectedCol}" column in the uploaded file.`);
+        setProcessingUpload(false);
+        return;
+      }
+
+      if (tariffCol === -1) {
+        const expectedCol = isOneViewFormat ? 'TariffNumber' : 'TARIFF NUM';
+        alert(`Could not find "${expectedCol}" column in the uploaded file.`);
         setProcessingUpload(false);
         return;
       }
@@ -205,7 +229,11 @@ const PartsSearchTool = () => {
         totalNotFound: notFoundParts.length,
         uniqueNotFoundCount: notFoundParts.length,
         totalUnmatchedRows: notFoundCount,
-        allUnmatchedParts: notFoundParts
+        allUnmatchedParts: notFoundParts,
+        isOneViewFormat: isOneViewFormat,
+        headers: headers,
+        primaryPartCol: primaryPartCol,
+        tariffCol: tariffCol
       });
 
     } catch (error) {
@@ -271,24 +299,59 @@ const PartsSearchTool = () => {
 
   const addMatchToTariffSheet = async (unmatchedPartNumber, matchedPart) => {
     const uploadData = uploadResults.data;
-    const headers = uploadData[0];
-    const primaryPartCol = headers.findIndex(h => 
-      h && h.toString().toUpperCase().includes('PRIMARY') && h.toString().toUpperCase().includes('PART')
-    );
-    const tariffCol = headers.findIndex(h => 
-      h && h.toString().toUpperCase().includes('TARIFF') && h.toString().toUpperCase().includes('NUM')
-    );
+    const headers = uploadResults.headers;
+    const primaryPartCol = uploadResults.primaryPartCol;
+    const tariffCol = uploadResults.tariffCol;
+    const isOneView = uploadResults.isOneViewFormat;
 
     let rowsUpdated = 0;
+    const matchedRows = []; // Store matched row data for the newly matched tab
+    
+    // Find and update ALL rows with this part number
     for (let i = 1; i < uploadData.length; i++) {
       const row = uploadData[i];
       if (row[primaryPartCol]?.toString().trim() === unmatchedPartNumber) {
+        // Add the tariff code to this row
         row[tariffCol] = matchedPart.tariff;
         rowsUpdated++;
+        
+        // Store the complete row data for newly matched tab
+        if (isOneView) {
+          matchedRows.push({
+            invoiceNumber: row[0], // InvoiceNumber
+            invoiceDate: row[1], // InvoiceDate  
+            invoiceTotal: row[2], // InvoiceTotal
+            supplierMID: row[3], // SupplierMID
+            supplierName: row[4], // SupplierName
+            buyerPartNumber: row[5], // BuyerPartNumber
+            supplierPartNumber: row[6], // SupplierPartNumber
+            quantity: row[7], // Quantity
+            unitOfMeasure: row[8], // UnitOfMeasure
+            description: row[9], // Description
+            unitPrice: row[10], // UnitPrice
+            itemTotal: row[11], // ItemTotal
+            currencyCode: row[12], // CurrencyCode
+            exchangeRate: row[13], // ExchangeRate
+            countryOfOrigin: row[14], // CountryOfOrigin
+            tariffNumber: matchedPart.tariff, // Updated tariff
+            matchedFromPart: matchedPart.eurolinkItem,
+            matchedFromDescription: matchedPart.description1
+          });
+        }
       }
     }
 
-    const newlyMatched = {
+    // Track this newly matched part
+    const newlyMatched = isOneView ? {
+      partNumber: unmatchedPartNumber,
+      tariffCode: matchedPart.tariff,
+      matchedFrom: matchedPart.eurolinkItem,
+      description1: matchedPart.description1,
+      description2: matchedPart.description2,
+      vendorName: matchedPart.vendorName,
+      rowsUpdated: rowsUpdated,
+      matchedRows: matchedRows // Store the complete invoice rows
+    } : {
       partNumber: unmatchedPartNumber,
       tariffCode: matchedPart.tariff,
       matchedFrom: matchedPart.eurolinkItem,
@@ -312,25 +375,53 @@ const PartsSearchTool = () => {
       allUnmatchedParts: updatedUnmatched
     };
 
+    // Create updated workbook with appropriate tabs
     const newWorksheet = XLSX.utils.aoa_to_sheet(uploadData);
     const newWorkbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'Updated Data');
+    XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, isOneView ? 'OneView Updated' : 'Updated Data');
 
+    // Create enhanced "Newly Matched" tab
     if (updatedNewlyMatched.length > 0) {
-      const newlyMatchedData = [
-        ['Part Number', 'Tariff Code', 'Matched From', 'Description 1', 'Description 2', 'Vendor Name', 'Rows Updated'],
-        ...updatedNewlyMatched.map(part => [
-          part.partNumber,
-          part.tariffCode,
-          part.matchedFrom,
-          part.description1,
-          part.description2,
-          part.vendorName,
-          part.rowsUpdated
-        ])
-      ];
-      const newlyMatchedSheet = XLSX.utils.aoa_to_sheet(newlyMatchedData);
-      XLSX.utils.book_append_sheet(newWorkbook, newlyMatchedSheet, 'Newly Matched');
+      if (isOneView) {
+        // For OneView format, create tab with complete invoice details plus matching info
+        const newlyMatchedData = [
+          ['InvoiceNumber', 'SupplierName', 'BuyerPartNumber', 'SupplierPartNumber', 'Description', 
+           'Quantity', 'UnitPrice', 'ItemTotal', 'TariffNumber', 'Matched From Part', 'Matched From Description'],
+          ...updatedNewlyMatched.flatMap(part => 
+            part.matchedRows.map(row => [
+              row.invoiceNumber,
+              row.supplierName,
+              row.buyerPartNumber,
+              row.supplierPartNumber,
+              row.description,
+              row.quantity,
+              row.unitPrice,
+              row.itemTotal,
+              row.tariffNumber,
+              row.matchedFromPart,
+              row.matchedFromDescription
+            ])
+          )
+        ];
+        const newlyMatchedSheet = XLSX.utils.aoa_to_sheet(newlyMatchedData);
+        XLSX.utils.book_append_sheet(newWorkbook, newlyMatchedSheet, 'Newly Matched');
+      } else {
+        // Original format
+        const newlyMatchedData = [
+          ['Part Number', 'Tariff Code', 'Matched From', 'Description 1', 'Description 2', 'Vendor Name', 'Rows Updated'],
+          ...updatedNewlyMatched.map(part => [
+            part.partNumber,
+            part.tariffCode,
+            part.matchedFrom,
+            part.description1,
+            part.description2,
+            part.vendorName,
+            part.rowsUpdated
+          ])
+        ];
+        const newlyMatchedSheet = XLSX.utils.aoa_to_sheet(newlyMatchedData);
+        XLSX.utils.book_append_sheet(newWorkbook, newlyMatchedSheet, 'Newly Matched');
+      }
     }
 
     updatedUploadResults.workbook = newWorkbook;
@@ -367,7 +458,7 @@ const PartsSearchTool = () => {
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Upload Excel File for Tariff Population</h2>
           <p className="text-gray-600 mb-4">
-            Upload an Excel file with "PRIMARY PART NUMBER" and "TARIFF NUM" columns. The tool will match part numbers against the database and populate tariff codes.
+            Upload an Excel file with part numbers and tariff columns. Supports both OneView format (BuyerPartNumber/TariffNumber) and standard format (PRIMARY PART NUMBER/TARIFF NUM).
           </p>
           
           <div className="flex flex-col lg:flex-row gap-4 items-start">
@@ -416,7 +507,10 @@ const PartsSearchTool = () => {
 
           {uploadResults && (
             <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <h3 className="font-semibold text-green-900 mb-2">Processing Complete!</h3>
+              <h3 className="font-semibold text-green-900 mb-2">
+                Processing Complete! 
+                {uploadResults.isOneViewFormat && <span className="text-sm font-normal text-green-700"> (OneView Format Detected)</span>}
+              </h3>
               <div className="text-sm text-green-800 space-y-1">
                 <p>✓ {uploadResults.matched} part numbers matched and populated with tariff codes</p>
                 <p>⚠ {uploadResults.totalUnmatchedRows} unmatched rows ({uploadResults.uniqueNotFoundCount} unique parts)</p>
